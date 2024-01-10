@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 	if (!pid && !tgid && !cgid && !allret) {
 		if (reset)
 			return 0;
-		goto usage;
+//		goto usage;
 	}
 
 	libbpf_set_print(libbpf_print_fn);

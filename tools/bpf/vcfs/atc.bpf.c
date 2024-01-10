@@ -16,6 +16,7 @@ unsigned long max_exec_slice = 0;
 //#define debug(args...) bpf_printk(args)
 #define debug(args...)
 
+/*
 SEC("sched/cfs_check_preempt_wakeup")
 int BPF_PROG(wakeup, struct task_struct *curr, struct task_struct *p)
 {
@@ -60,7 +61,9 @@ int BPF_PROG(wakeup, struct task_struct *curr, struct task_struct *p)
 	}
 	return ret;
 }
+*/
 
+/*
 SEC("sched/cfs_wakeup_preempt_entity")
 int BPF_PROG(preempt_entity, struct sched_entity *curr, struct sched_entity *se)
 {
@@ -71,7 +74,6 @@ int BPF_PROG(preempt_entity, struct sched_entity *curr, struct sched_entity *se)
 
 	if (curr == NULL || se == NULL)
 		return 0;
-	/* pid/tgid mode */
 	if (tgidpid) {
 		unsigned long tgidpid1, tgidpid2;
 
@@ -91,7 +93,6 @@ int BPF_PROG(preempt_entity, struct sched_entity *curr, struct sched_entity *se)
 			debug("entity ret %d", ret);
 		}
 
-	/* cgroup id mode */
 	} else if (cgid) {
 		if (bpf_sched_entity_belongs_to_cgrp(curr, cgid))
 			ret = -1;
@@ -107,7 +108,9 @@ int BPF_PROG(preempt_entity, struct sched_entity *curr, struct sched_entity *se)
 
 	return ret;
 }
+*/
 
+/*
 SEC("sched/cfs_check_preempt_tick")
 int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 {
@@ -123,7 +126,6 @@ int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 	if (curr == NULL)
 		return 0;
 
-	/* pid/tgid mode */
 	if (tgidpid) {
 		tgidpid1 = bpf_sched_entity_to_tgidpid(curr);
 
@@ -134,7 +136,6 @@ int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 			debug("tick tgid %d pid %d ret %d", tgidpid1 >> 32,
 				   tgidpid1 & 0xFFFFFFFF, ret);
 
-	/* cgroup id mode */
 	} else if (cgid) {
 		if (bpf_sched_entity_belongs_to_cgrp(curr, cgid)) {
 			ret = -1;
@@ -143,7 +144,7 @@ int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 	}
 
 	return ret;
-}
+}*/
 
 
 SEC("sched/cfs_vcpu_capacity")
