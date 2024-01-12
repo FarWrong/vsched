@@ -94,6 +94,7 @@
 #include "../workqueue_internal.h"
 #include "../../io_uring/io-wq.h"
 #include "../smpboot.h"
+#include <linux/bpf_sched.h>
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -5554,6 +5555,10 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
+	if (bpf_sched_enabled()) {
+		bpf_sched_cfs_sched_tick_end();
+	}
+
 	trigger_load_balance(rq);
 #endif
 }

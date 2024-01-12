@@ -15232,13 +15232,10 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 	} else if (prog->type == BPF_PROG_TYPE_TRACING &&
 		   btf_id_set_contains(&btf_id_deny, btf_id)) {
 		return -EINVAL;
-<<<<<<< HEAD
 	} else if (prog->type == BPF_PROG_TYPE_SCHED) {
 		ret = bpf_sched_verify_prog(&env->log, prog);
 		if (ret < 0)
 			return ret;
-=======
->>>>>>> source-repo/iss53
 	}
 
 	key = bpf_trampoline_compute_key(tgt_prog, prog->aux->attach_btf, btf_id);

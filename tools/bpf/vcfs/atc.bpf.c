@@ -152,3 +152,9 @@ int BPF_PROG(capacity)
 {
 	return 999;
 }
+
+SEC("sched/cfs_vcpu_capacity")
+int BPF_PROG(capacity)
+{
+        return 999;
+}
