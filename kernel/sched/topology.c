@@ -1683,6 +1683,24 @@ void set_sched_topology(struct sched_domain_topology_level *tl)
 	sched_domain_topology_saved = NULL;
 }
 
+struct sched_domain_topology_level *get_sched_topology(void)
+{
+        return sched_domain_topology;
+}
+
+EXPORT_SYMBOL(get_sched_topology);
+
+
+void set_live_topology(struct sched_domain_topology_level *tl)
+{
+	set_sched_topology(tl);
+	x86_topology_update = true;
+	rebuild_sched_domains();
+	return;
+}
+EXPORT_SYMBOL(set_live_topology);
+
+
 #ifdef CONFIG_NUMA
 
 static const struct cpumask *sd_numa_mask(int cpu)

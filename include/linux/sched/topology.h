@@ -204,6 +204,8 @@ struct sched_domain_topology_level {
 };
 
 extern void set_sched_topology(struct sched_domain_topology_level *tl);
+extern struct sched_domain_topology_level *get_sched_topology(void);
+extern void set_live_topology(struct sched_domain_topology_level *tl);
 
 #ifdef CONFIG_SCHED_DEBUG
 # define SD_INIT_NAME(type)		.name = #type

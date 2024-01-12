@@ -54,6 +54,7 @@ static inline void task_cputime_scaled(struct task_struct *t,
 #endif
 
 extern void task_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st);
+extern int is_cpu_preempted(int cpunum);
 extern void thread_group_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st);
 extern void cputime_adjust(struct task_cputime *curr, struct prev_cputime *prev,
 			   u64 *ut, u64 *st);

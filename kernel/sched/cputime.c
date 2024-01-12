@@ -251,18 +251,38 @@ static __always_inline u64 steal_account_process_time(u64 maxtime)
 #ifdef CONFIG_PARAVIRT
 	if (static_key_false(&paravirt_steal_enabled)) {
 		u64 steal;
-
 		steal = paravirt_steal_clock(smp_processor_id());
 		steal -= this_rq()->prev_steal_time;
 		steal = min(steal, maxtime);
 		account_steal_time(steal);
 		this_rq()->prev_steal_time += steal;
-
+		if(steal>0){
+			u64 now = sched_clock();
+			this_rq()->last_active_time = now-this_rq()->last_preemption-steal;
+			this_rq()->last_preemption = now;
+			this_rq()->preemptions += 1;
+			if(this_rq()->max_latency<steal){
+				this_rq()->max_latency=steal;
+			}
+		}
 		return steal;
 	}
 #endif
 	return 0;
 }
+
+
+int is_cpu_preempted(int cpunum)
+{
+	s64 time_diff;
+	time_diff = sched_clock_stable()-this_rq()->clock_preempt;
+	if(time_diff>1500000){
+		return 1;
+	}
+        return 0;
+}
+
+EXPORT_SYMBOL(is_cpu_preempted);
 
 /*
  * Account how much elapsed time was spent in steal, irq, or softirq time.
@@ -483,6 +503,8 @@ void thread_group_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st)
 void account_process_tick(struct task_struct *p, int user_tick)
 {
 	u64 cputime, steal;
+	this_rq()->clock_preempt_prev=this_rq()->clock_preempt;
+	this_rq()->clock_preempt=sched_clock_stable();
 
 	if (vtime_accounting_enabled_this_cpu())
 		return;

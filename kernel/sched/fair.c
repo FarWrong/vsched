@@ -878,6 +878,11 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq)
 }
 #endif /* CONFIG_SMP */
 
+
+
+
+static int find_new_ilb(void);
+static void migrate_task_rq_fair(struct task_struct *p, int new_cpu);
 /*
  * Update the current task's runtime statistics.
  */
@@ -911,8 +916,27 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	update_min_vruntime(cfs_rq);
 
 	if (entity_is_task(curr)) {
+		struct rq *rq = rq_of(cfs_rq);
+		//int cpu = cpu_of(rq);
 		struct task_struct *curtask = task_of(curr);
-
+		if(rq->last_preemption !=0){
+			s64 last_time;
+			if((now-delta_exec)>rq->last_preemption){
+				last_time=now-delta_exec;
+			}else{
+				last_time=now-rq->last_preemption;
+			}
+			//note that there's supposed to be a breakpoint here
+			if(((rq->last_active_time*7/10)<last_time)){
+				//first, find an idle cpu
+				int ilb_cpu;
+				ilb_cpu = find_new_ilb();
+				if(ilb_cpu>=nr_cpu_ids){
+					//second, migrate
+					migrate_task_rq_fair(curtask,ilb_cpu);
+				}
+			}
+		}
 		trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
 		cgroup_account_cputime(curtask, delta_exec);
 		account_group_exec_runtime(curtask, delta_exec);
@@ -7569,14 +7593,12 @@ static int
 wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
 {
 	s64 gran, vdiff = curr->vruntime - se->vruntime;
-
 	if (bpf_sched_enabled()) {
 		int ret = bpf_sched_cfs_wakeup_preempt_entity(curr, se);
 
 		if (ret)
 			return ret;
 	}
-
 
 	if (vdiff <= 0)
 		return -1;
@@ -8929,6 +8951,9 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 
 	rq->cpu_capacity = capacity;
 
+	if(rq->cpu_capacity_custom > 0) {
+                rq->cpu_capacity = rq->cpu_capacity_custom;
+        }
 	/*
 	 * Detect if the performance domain is in capacity inversion state.
 	 *
@@ -11114,7 +11139,7 @@ static inline int on_null_domain(struct rq *rq)
  *   anywhere yet.
  */
 
-static inline int find_new_ilb(void)
+static int find_new_ilb(void)
 {
 	int ilb;
 	const struct cpumask *hk_mask;

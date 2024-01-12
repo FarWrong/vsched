@@ -888,7 +888,11 @@ extern int sched_init_domains(const struct cpumask *cpu_map);
 extern void rq_attach_root(struct rq *rq, struct root_domain *rd);
 extern void sched_get_rd(struct root_domain *rd);
 extern void sched_put_rd(struct root_domain *rd);
-
+extern void set_custom_capacity(unsigned long custom_capacity,int cpu);
+/* used to give information to the VCPU prober */
+extern void get_fine_stl_preempts(int cpunum,u64* preempt,u64* steals_time);
+extern void get_max_latency(int cpunum,u64* max_latency);
+extern void reset_max_latency(u64 max_latency);
 #ifdef HAVE_RT_PUSH_IPI
 extern void rto_push_irq_work_func(struct irq_work *work);
 #endif
@@ -1013,6 +1017,8 @@ struct rq {
 
 	unsigned int		clock_update_flags;
 	u64			clock;
+	u64			clock_preempt;
+	u64			clock_preempt_prev;
 	/* Ensure that all clocks are in the same cache line */
 	u64			clock_task ____cacheline_aligned;
 	u64			clock_pelt;
@@ -1040,6 +1046,7 @@ struct rq {
 	struct sched_domain __rcu	*sd;
 
 	unsigned long		cpu_capacity;
+	unsigned long 		cpu_capacity_custom;
 	unsigned long		cpu_capacity_orig;
 	unsigned long		cpu_capacity_inverted;
 
@@ -1092,7 +1099,11 @@ struct rq {
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
 	u64			prev_steal_time_rq;
 #endif
-
+	u64			last_active_time;
+	u64			last_preemption;
+	/* used to hold preemptions */
+	u64			preemptions;
+	u64			max_latency;
 	/* calc_load related fields */
 	unsigned long		calc_load_update;
 	long			calc_load_active;

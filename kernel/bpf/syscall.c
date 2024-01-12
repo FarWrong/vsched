@@ -3106,7 +3106,6 @@ static int bpf_tracing_prog_attach(struct bpf_prog *prog,
 		link = NULL;
 		goto out_unlock;
 	}
-
 	if (prog->type == BPF_PROG_TYPE_SCHED)
 		bpf_sched_inc();
 

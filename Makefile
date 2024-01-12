@@ -3,7 +3,7 @@ VERSION = 6
 PATCHLEVEL = 1
 SUBLEVEL = 36
 EXTRAVERSION = BPF
-NAME = BPF 
+NAME = BPF
 
 # *DOCUMENTATION*
 # To see a list of typical targets execute "make help"
