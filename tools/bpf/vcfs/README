@@ -7,7 +7,7 @@ of the Makefile.
 
 generate the vmlinux.h
 
-bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
+../bpftool/bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
 
 
 fatal error: 'bpf_helper_defs.h' file not found

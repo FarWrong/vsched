@@ -919,6 +919,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 		struct rq *rq = rq_of(cfs_rq);
 		//int cpu = cpu_of(rq);
 		struct task_struct *curtask = task_of(curr);
+/*
 		if(rq->last_preemption !=0){
 			s64 last_time;
 			if((now-delta_exec)>rq->last_preemption){
@@ -937,6 +938,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 				}
 			}
 		}
+*/
 		trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
 		cgroup_account_cputime(curtask, delta_exec);
 		account_group_exec_runtime(curtask, delta_exec);

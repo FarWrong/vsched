@@ -1,5 +1,5 @@
 # FIX ME
-TREE=/home/ubuntu/vsched-1/linux-6.1.36
+TREE=/home/ubuntu/vsched
 
 BPFTOOL=$(TREE)/tools/bpf/bpftool/bpftool
 LIBBPF=$(TREE)/tools/lib/bpf/libbpf.a

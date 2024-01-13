@@ -5556,7 +5556,28 @@ void scheduler_tick(void)
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
 	if (bpf_sched_enabled()) {
-		bpf_sched_cfs_sched_tick_end();
+		int test = bpf_sched_cfs_sched_tick_end(rq);
+		if(test>0){
+			//struct task_struct *currtask = rq->curr;
+			int select_cpu=0;
+			for(int x=cpu+1;x<nr_cpu_ids;x++){
+				if ( idle_cpu(x%nr_cpu_ids)){
+					select_cpu=x%nr_cpu_ids;
+					break;
+				}
+			}
+			//this is an atrocity, but I don't want to recompile the kernel :(
+			if(test==1){
+				migrate_task_to(curr,select_cpu);
+			}
+			if(test==2){
+				set_task_cpu(curr,select_cpu);
+			}
+			if(test==3){
+				//set_task_rq_fair(curr,select_cpu);
+				printk("whyy th");
+			}
+		}
 	}
 
 	trigger_load_balance(rq);

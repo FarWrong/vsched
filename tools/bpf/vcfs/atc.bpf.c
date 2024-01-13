@@ -144,17 +144,26 @@ int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 	}
 
 	return ret;
-}*/
-
+}
+*/
 
 SEC("sched/cfs_vcpu_capacity")
 int BPF_PROG(capacity)
 {
+//	print("test");
+	debug("duh");
 	return 999;
 }
 
-SEC("sched/cfs_vcpu_capacity")
-int BPF_PROG(capacity)
+SEC("sched/cfs_sched_tick_end")
+int BPF_PROG(test,struct rq *rq)
 {
-        return 999;
+	struct task_struct *curr = rq->curr;
+	const char test_str[] = "test string:%llu\n";
+//	 bpf_trace_printk(test_str,sizeof(test_str),*(long *)(curr->se.vruntime));
+	if(rq->nr_running==1 && (curr != rq->idle)){
+		
+		bpf_printk("what is THIS: %llu",curr->se.vruntime);
+        }
+	return 999;
 }
