@@ -160,10 +160,22 @@ int BPF_PROG(test,struct rq *rq)
 {
 	struct task_struct *curr = rq->curr;
 	const char test_str[] = "test string:%llu\n";
-//	 bpf_trace_printk(test_str,sizeof(test_str),*(long *)(curr->se.vruntime));
+	s64 delta_exec;
+//	bpf_trace_printk(test_str,sizeof(test_str),*(long *)(curr->se.vruntime));
 	if(rq->nr_running==1 && (curr != rq->idle)){
-		
-		bpf_printk("what is THIS: %llu",curr->se.vruntime);
-        }
-	return 999;
+		if(rq->last_preemption !=0){
+			delta_exec = curr->se.vruntime;
+                        s64 last_time;
+                        if((now-delta_exec)>rq->last_preemption){
+                                last_time=delta_exec;
+                        }else{
+                                last_time=now-rq->last_preemption;
+                        }
+                        //note that there's supposed to be a breakpoint here
+                        if(((rq->last_active_time*7/10)<last_time)){
+				bpf_printk("what is THIS: %llu",curr->se.vruntime);
+                        }
+                }
+	}
+	return -1;
 }
