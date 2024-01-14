@@ -252,18 +252,25 @@ static __always_inline u64 steal_account_process_time(u64 maxtime)
 #ifdef CONFIG_PARAVIRT
 	if (static_key_false(&paravirt_steal_enabled)) {
 		u64 steal;
+		struct rq *rq = this_rq();
 		steal = paravirt_steal_clock(smp_processor_id());
 		steal -= this_rq()->prev_steal_time;
 		steal = min(steal, maxtime);
 		account_steal_time(steal);
-		this_rq()->prev_steal_time += steal;
+		rq->prev_steal_time += steal;
 		if(steal>0){
 			u64 now = sched_clock();
-			this_rq()->last_active_time = now-this_rq()->last_preemption-steal;
-			this_rq()->last_preemption = now;
-			this_rq()->preemptions += 1;
-			if(this_rq()->max_latency<steal){
-				this_rq()->max_latency=steal;
+			if(steal>1000000){
+				if(rq->last_preemption>rq->last_idle_tp){
+					rq->last_active_time = now-rq->last_preemption-steal;
+				}else{
+					rq->last_active_time = now-rq->last_idle_tp-steal;
+				}
+				rq->last_preemption = now;
+			}
+			rq->preemptions += 1;
+			if(rq->max_latency<steal){
+				rq->max_latency=steal;
 			}
 		}
 		return steal;
