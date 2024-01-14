@@ -86,7 +86,7 @@ static unsigned int normalized_sysctl_sched_latency	= 6000000ULL;
  * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
  */
 unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
-
+DEFINE_PER_CPU(int, is_target_migration);
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
@@ -11740,18 +11740,38 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 						CPU_IDLE : CPU_NOT_IDLE;
 	if(this_rq->preempt_migrate_flag){
 		int cpu = cpu_of(this_rq);
-        	int select_cpu=0;
+        	int select_cpu=-1;
+		int iterate_cpu=-1;
+		s64 largest_idle_delta=0;
+		int lrg_idle_delta_trg=-1;
         	struct task_struct *curr = this_rq->curr;
         	this_rq->preempt_migrate_flag=0;
 		if(curr != this_rq->idle){
-			for(int x=cpu+1;x<nr_cpu_ids;x++){
-                		if ( idle_cpu(x%nr_cpu_ids)){
-                        		select_cpu=x%nr_cpu_ids;
-                        		break;
+			for(int x=cpu+1;x<x+nr_cpu_ids;x++){
+				iterate_cpu=x%nr_cpu_ids;
+                		if (idle_cpu(iterate_cpu) && (1 != per_cpu(is_target_migration, iterate_cpu))){		
+					if(cpu_rq(iterate_cpu)->last_idle_delta>30992412){
+						select_cpu=x%nr_cpu_ids;
+                                        	per_cpu(is_target_migration, select_cpu) = 1;
+                                        	break;
+					}
+					if(largest_idle_delta<cpu_rq(iterate_cpu)->last_idle_delta){
+						largest_idle_delta=cpu_rq(iterate_cpu)->last_idle_delta;
+						lrg_idle_delta_trg=iterate_cpu;
+					}
                 		}
         		}
-			migrate_task_to(curr,select_cpu);
+			if(select_cpu!=-1){
+				migrate_task_to(curr,select_cpu);
+				per_cpu(is_target_migration, select_cpu) = 0;
+			}else if(lrg_idle_delta_trg != -1){
+				per_cpu(is_target_migration, lrg_idle_delta_trg) = 1;
+				migrate_task_to(curr,lrg_idle_delta_trg);
+                                per_cpu(is_target_migration, lrg_idle_delta_trg) = 0;
+
+			}
 		}
+		return;
 	}
 	/*
 	 * If this CPU has a pending nohz_balance_kick, then do the

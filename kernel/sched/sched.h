@@ -1079,6 +1079,7 @@ struct rq {
 #endif
 	u64			idle_stamp;
 	u64			avg_idle;
+	u64			last_idle_delta;
 
 	unsigned long		wake_stamp;
 	u64			wake_avg_idle;

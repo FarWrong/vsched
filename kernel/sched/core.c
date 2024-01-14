@@ -3706,7 +3706,7 @@ static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags,
 	if (rq->idle_stamp) {
 		u64 delta = rq_clock(rq) - rq->idle_stamp;
 		u64 max = 2*rq->max_idle_balance_cost;
-
+		rq->last_idle_delta =delta;
 		update_avg(&rq->avg_idle, delta);
 
 		if (rq->avg_idle > max)

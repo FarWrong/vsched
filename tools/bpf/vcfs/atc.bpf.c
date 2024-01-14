@@ -176,12 +176,16 @@ int BPF_PROG(test,struct rq *rq,u64 now)
                                 last_time=now-rq->last_preemption;
                         }
                         //note that there's supposed to be a breakpoint here
-                        s64 prev_time_brk = (rq->last_active_time/10)*7;
-			if(69937630 < last_time){
+                        s64 prev_time_brk = (rq->last_active_time/10)*6;
+			if(prev_time_brk<500000){
+				prev_time_brk=10000000;
+			}
+			if(prev_time_brk < last_time){
 				if (simple_strcmp(curr->comm, "sysbench") == 0) {
 						bpf_printk("Now: %llu",now);
 						bpf_printk("Last active time: %llu",rq->last_active_time);
 						bpf_printk("Last time: %llu",last_time);
+						bpf_printk("last idle time:%llu",rq->last_idle_delta);
 						bpf_printk("breakpoint: %llu",prev_time_brk);
 						bpf_printk("Current Task: %s\n", curr->comm);
 						return 1;
