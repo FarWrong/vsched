@@ -112,6 +112,9 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_util_est_cfs_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_util_est_se_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_update_nr_running_tp);
 
+
+
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #ifdef CONFIG_SCHED_DEBUG
@@ -5571,13 +5574,6 @@ void scheduler_tick(void)
 
 #ifdef CONFIG_SMP
 	rq->idle_balance = idle_cpu(cpu);
-	if (bpf_sched_enabled()) {
-		u64 now_time=sched_clock();
-		int test = bpf_sched_cfs_sched_tick_end(rq,now_time);
-		if(test>0){
-			smp_call_function_single_async(cpu,&cpu_rq(cpu)->preempt_migrate);
-		}
-	}
 
 	trigger_load_balance(rq);
 #endif

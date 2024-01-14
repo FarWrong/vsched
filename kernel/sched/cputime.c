@@ -224,6 +224,7 @@ void account_idle_time(u64 cputime)
 		cpustat[CPUTIME_IOWAIT] += cputime;
 	else
 		cpustat[CPUTIME_IDLE] += cputime;
+	rq->last_idle_tp=sched_clock();
 }
 
 

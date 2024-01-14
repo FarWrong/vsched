@@ -12,7 +12,7 @@ generate the vmlinux.h
 
 fatal error: 'bpf_helper_defs.h' file not found
 
-cd tools/lib/bpf
+cd ../../tools/lib/bpf
 make
 
 Then run $ ./atc --help for available commands/options.

@@ -979,7 +979,7 @@ struct rq {
 	unsigned int		nohz_tick_stopped;
 	atomic_t		nohz_flags;
 #endif /* CONFIG_NO_HZ_COMMON */
-
+	unsigned int		preempt_migrate_flag;
 #ifdef CONFIG_SMP
 	unsigned int		ttwu_pending;
 #endif
@@ -1050,7 +1050,7 @@ struct rq {
 	unsigned long 		cpu_capacity_custom;
 	unsigned long		cpu_capacity_orig;
 	unsigned long		cpu_capacity_inverted;
-
+	unsigned long 		last_idle_tp;
 	struct balance_callback *balance_callback;
 
 	unsigned char		nohz_idle_balance;

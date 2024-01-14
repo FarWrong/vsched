@@ -3,7 +3,6 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
-
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 unsigned long tgidpid = 0;
@@ -11,6 +10,18 @@ unsigned long cgid = 0;
 unsigned long allret = 0;
 unsigned long max_exec_slice = 0;
 
+int simple_strcmp(const char *s1, const char *s2) {
+    while (*s1 == *s2) {
+        // If we reach the end of both strings, they are equal
+        if (*s1 == '\0') {
+            return 0;
+        }
+        s1++;
+        s2++;
+    }
+    // Return the difference in ASCII values of the first differing characters
+    return *(unsigned char *)s1 - *(unsigned char *)s2;
+}
 #define INVALID_RET ((unsigned long) -1L)
 
 //#define debug(args...) bpf_printk(args)
@@ -147,16 +158,9 @@ int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
 }
 */
 
-SEC("sched/cfs_vcpu_capacity")
-int BPF_PROG(capacity)
-{
-//	print("test");
-	debug("duh");
-	return 999;
-}
 
 SEC("sched/cfs_sched_tick_end")
-int BPF_PROG(test,struct rq *rq)
+int BPF_PROG(test,struct rq *rq,u64 now)
 {
 	struct task_struct *curr = rq->curr;
 	const char test_str[] = "test string:%llu\n";
@@ -164,18 +168,31 @@ int BPF_PROG(test,struct rq *rq)
 //	bpf_trace_printk(test_str,sizeof(test_str),*(long *)(curr->se.vruntime));
 	if(rq->nr_running==1 && (curr != rq->idle)){
 		if(rq->last_preemption !=0){
-			delta_exec = curr->se.vruntime;
+			delta_exec = (now) - (rq->last_idle_tp);
                         s64 last_time;
                         if((now-delta_exec)>rq->last_preemption){
                                 last_time=delta_exec;
                         }else{
                                 last_time=now-rq->last_preemption;
                         }
+			last_time=delta_exec;
                         //note that there's supposed to be a breakpoint here
-                        if(((rq->last_active_time*7/10)<last_time)){
-				bpf_printk("what is THIS: %llu",curr->se.vruntime);
+                        if(2950796292<last_time){
+				if (simple_strcmp(curr->comm, "sysbench") == 0) {
+//					if(curr->se.nr_migrations<1){
+						bpf_printk("Now: %llu",now);
+//						bpf_printk("last_arrival: %llu",curr->sched_info.last_queued);
+						bpf_printk("Delta: %llu",last_time);
+						bpf_printk("execstart: %llu",(rq->last_idle_tp));
+						bpf_printk("Current Task: %s\n", curr->comm);
+						//last_time += 100000;
+//						rq->last_active_time= last_time;
+						return 1;
+//					}
+				}
                         }
                 }
 	}
 	return -1;
 }
+

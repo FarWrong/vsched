@@ -11760,7 +11760,21 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 	struct rq *this_rq = this_rq();
 	enum cpu_idle_type idle = this_rq->idle_balance ?
 						CPU_IDLE : CPU_NOT_IDLE;
-
+	if(this_rq->preempt_migrate_flag){
+		int cpu = cpu_of(this_rq);
+        	int select_cpu=0;
+        	struct task_struct *curr = this_rq->curr;
+        	this_rq->preempt_migrate_flag=0;
+		if(curr != this_rq->idle){
+			for(int x=cpu+1;x<nr_cpu_ids;x++){
+                		if ( idle_cpu(x%nr_cpu_ids)){
+                        		select_cpu=x%nr_cpu_ids;
+                        		break;
+                		}
+        		}
+			migrate_task_to(curr,select_cpu);
+		}
+	}
 	/*
 	 * If this CPU has a pending nohz_balance_kick, then do the
 	 * balancing on behalf of the other idle CPUs whose ticks are
@@ -11782,6 +11796,9 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
  */
 void trigger_load_balance(struct rq *rq)
 {
+
+
+
 	/*
 	 * Don't need to rebalance while attached to NULL domain or
 	 * runqueue CPU is not active
@@ -11789,8 +11806,20 @@ void trigger_load_balance(struct rq *rq)
 	if (unlikely(on_null_domain(rq) || !cpu_active(cpu_of(rq))))
 		return;
 
-	if (time_after_eq(jiffies, rq->next_balance))
+	if (bpf_sched_enabled()) {
+                u64 now_time=sched_clock();
+                int test = bpf_sched_cfs_sched_tick_end(rq,now_time);
+                if(test>0){
+			rq->preempt_migrate_flag=1;
+                }else{
+			rq->preempt_migrate_flag=0;
+		}
+        }
+	if(time_after_eq(jiffies, rq->next_balance) ||rq->preempt_migrate_flag){
 		raise_softirq(SCHED_SOFTIRQ);
+	}
+
+
 
 	nohz_balancer_kick(rq);
 }
