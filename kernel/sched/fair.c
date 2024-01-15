@@ -11729,6 +11729,7 @@ out:
 	return pulled_task;
 }
 
+
 /*
  * run_rebalance_domains is triggered when needed from the scheduler tick.
  * Also triggered for nohz idle balancing (with nohz_balancing_kick set).
@@ -11740,35 +11741,31 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 						CPU_IDLE : CPU_NOT_IDLE;
 	if(this_rq->preempt_migrate_flag){
 		int cpu = cpu_of(this_rq);
-        	int select_cpu=-1;
-		int iterate_cpu=-1;
-		s64 largest_idle_delta=0;
-		int lrg_idle_delta_trg=-1;
         	struct task_struct *curr = this_rq->curr;
         	this_rq->preempt_migrate_flag=0;
+		int least_loaded_cpu = -1;
+		int select_cpu=-1;
+		unsigned long load=0;
+		unsigned long min_load = ULONG_MAX;
 		if(curr != this_rq->idle){
-			for(int x=cpu+1;x<x+nr_cpu_ids;x++){
-				iterate_cpu=x%nr_cpu_ids;
-                		if (idle_cpu(iterate_cpu) && (1 != per_cpu(is_target_migration, iterate_cpu))){		
-					if(cpu_rq(iterate_cpu)->last_idle_delta>30992412){
-						select_cpu=x%nr_cpu_ids;
-                                        	per_cpu(is_target_migration, select_cpu) = 1;
-                                        	break;
-					}
-					if(largest_idle_delta<cpu_rq(iterate_cpu)->last_idle_delta){
-						largest_idle_delta=cpu_rq(iterate_cpu)->last_idle_delta;
-						lrg_idle_delta_trg=iterate_cpu;
-					}
-                		}
+			for_each_cpu_wrap(select_cpu,  &(curr->cpus_mask), cpu+1) {
+				if(per_cpu(is_target_migration, select_cpu)){
+					continue;
+				}
+				if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
+					struct rq *dir_rq = cpu_rq(select_cpu);
+					load = cpu_load(dir_rq);
+                        		if (load < min_load) {
+						per_cpu(is_target_migration, least_loaded_cpu)=0; 
+                                		min_load = load;
+                                		least_loaded_cpu = select_cpu;
+						per_cpu(is_target_migration, least_loaded_cpu)=1;
+                        		}
+				}
         		}
-			if(select_cpu!=-1){
-				migrate_task_to(curr,select_cpu);
-				per_cpu(is_target_migration, select_cpu) = 0;
-			}else if(lrg_idle_delta_trg != -1){
-				per_cpu(is_target_migration, lrg_idle_delta_trg) = 1;
-				migrate_task_to(curr,lrg_idle_delta_trg);
-                                per_cpu(is_target_migration, lrg_idle_delta_trg) = 0;
-
+			if(least_loaded_cpu!=-1){
+				migrate_task_to(curr,least_loaded_cpu);
+				per_cpu(is_target_migration, least_loaded_cpu)=0;
 			}
 		}
 		return;
