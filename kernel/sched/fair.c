@@ -11148,7 +11148,7 @@ static void kick_ilb(unsigned int flags)
 
 	/*
 	 * Increase nohz.next_balance only when if full ilb is triggered but
-	 * not if we only update stats.
+	 * ot if we only update stats.
 	 */
 	if (flags & NOHZ_BALANCE_KICK)
 		nohz.next_balance = jiffies+1;
@@ -11741,6 +11741,18 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 						CPU_IDLE : CPU_NOT_IDLE;
 	if(this_rq->preempt_migrate_flag){
 		int cpu = cpu_of(this_rq);
+		struct rq *targ_rq= cpu_rq(this_rq->preempt_migrate_target);
+		struct task_struct *targ_tsk = this_rq->curr;
+		if(targ_tsk != targ_rq->idle){
+			migrate_task_to(targ_tsk,cpu);
+		}
+		targ_rq->preempt_migrate_locked=0;
+		this_rq->preempt_migrate_flag=0;
+		atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
+	}
+
+/*
+		int cpu = cpu_of(this_rq);
         	struct task_struct *curr = this_rq->curr;
         	this_rq->preempt_migrate_flag=0;
 		int least_loaded_cpu = -1;
@@ -11749,27 +11761,23 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 		unsigned long min_load = ULONG_MAX;
 		if(curr != this_rq->idle){
 			for_each_cpu_wrap(select_cpu,  &(curr->cpus_mask), cpu+1) {
-				if(per_cpu(is_target_migration, select_cpu)){
-					continue;
+				if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
+					break;
 				}
 				if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
 					struct rq *dir_rq = cpu_rq(select_cpu);
 					load = cpu_load(dir_rq);
                         		if (load < min_load) {
-						per_cpu(is_target_migration, least_loaded_cpu)=0; 
                                 		min_load = load;
                                 		least_loaded_cpu = select_cpu;
-						per_cpu(is_target_migration, least_loaded_cpu)=1;
                         		}
 				}
         		}
-			if(least_loaded_cpu!=-1){
-				migrate_task_to(curr,least_loaded_cpu);
-				per_cpu(is_target_migration, least_loaded_cpu)=0;
+			if(select_cpu!=-1){
+				migrate_task_to(curr,select_cpu);
 			}
 		}
-		return;
-	}
+*/
 	/*
 	 * If this CPU has a pending nohz_balance_kick, then do the
 	 * balancing on behalf of the other idle CPUs whose ticks are
@@ -11801,16 +11809,43 @@ void trigger_load_balance(struct rq *rq)
 	if (unlikely(on_null_domain(rq) || !cpu_active(cpu_of(rq))))
 		return;
 
-	if (bpf_sched_enabled()) {
+	if (bpf_sched_enabled() && !(rq->preempt_migrate_locked)) {
                 u64 now_time=sched_clock();
                 int test = bpf_sched_cfs_sched_tick_end(rq,now_time);
                 if(test>0){
-			rq->preempt_migrate_flag=1;
-                }else{
-			rq->preempt_migrate_flag=0;
+			int select_cpu=-1;
+			unsigned long load=0;
+			unsigned long min_load = ULONG_MAX;
+			struct task_struct *curr = rq->curr;
+			int cpu = cpu_of(rq);
+			int target_cpu = -1;
+
+			for_each_cpu_wrap(select_cpu,  &(curr->cpus_mask), cpu+1) {
+				/*
+         			* We need a cpu that's not: A destination for an existing migration
+         			*
+         			*/
+                                if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
+                                        unsigned int is_held=atomic_fetch_or(PRMPT_HELD_MASK,prmpt_flags(select_cpu));
+					if(is_held & PRMPT_HELD_MASK){
+						target_cpu=select_cpu;
+						break;
+					}
+                                }
+                        }
+			if(target_cpu!=-1){
+				//time to set up all the locks now that we've found someone
+				//in the case that between prmpt_flags and PRMMPT_HELD_MASK
+				struct rq *dir_rq = cpu_rq(select_cpu);
+				dir_rq->preempt_migrate_flag=1;
+				dir_rq->preempt_migrate_target=cpu_of(rq);
+				rq->preempt_migrate_locked=1;
+                                smp_call_function_single_async(select_cpu, &cpu_rq(select_cpu)->preempt_migrate);
+			}
+
 		}
         }
-	if(time_after_eq(jiffies, rq->next_balance) ||rq->preempt_migrate_flag){
+	if(time_after_eq(jiffies, rq->next_balance)){
 		raise_softirq(SCHED_SOFTIRQ);
 	}
 

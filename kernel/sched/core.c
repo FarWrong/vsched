@@ -1204,18 +1204,7 @@ static void nohz_csd_func(void *info)
 
 static void preempt_migrate_func(void *info)
 {
-        struct rq *rq = info;
-        int cpu = cpu_of(rq);
-        unsigned int flags;
-	int select_cpu=0;
-	struct task_struct *curr = rq->curr;
-      	for(int x=cpu+1;x<nr_cpu_ids;x++){
-            	if ( idle_cpu(x%nr_cpu_ids)){
-                	select_cpu=x%nr_cpu_ids;
-                        break;
-        	}
-        }
-        migrate_task_to(curr,select_cpu);
+	raise_softirq_irqoff(SCHED_SOFTIRQ);
 }
 
 #ifdef CONFIG_NO_HZ_FULL

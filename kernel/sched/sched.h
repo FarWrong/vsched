@@ -979,7 +979,10 @@ struct rq {
 	unsigned int		nohz_tick_stopped;
 	atomic_t		nohz_flags;
 #endif /* CONFIG_NO_HZ_COMMON */
+	atomic_t		prmpt_flags;
 	unsigned int		preempt_migrate_flag;
+	unsigned int 		preempt_migrate_locked;
+	unsigned int		preempt_migrate_target;
 #ifdef CONFIG_SMP
 	unsigned int		ttwu_pending;
 #endif
@@ -2795,9 +2798,11 @@ extern void cfs_bandwidth_usage_dec(void);
 /* Update nohz.next_balance */
 #define NOHZ_NEXT_KICK		BIT(NOHZ_NEXT_KICK_BIT)
 
+#define PRMPT_HELD_MASK		BIT(2)
 #define NOHZ_KICK_MASK	(NOHZ_BALANCE_KICK | NOHZ_STATS_KICK | NOHZ_NEXT_KICK)
 
 #define nohz_flags(cpu)	(&cpu_rq(cpu)->nohz_flags)
+#define prmpt_flags(cpu) (&cpu_rq(cpu)->prmpt_flags)
 
 extern void nohz_balance_exit_idle(struct rq *rq);
 #else
