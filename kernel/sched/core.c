@@ -1204,7 +1204,10 @@ static void nohz_csd_func(void *info)
 
 static void preempt_migrate_func(void *info)
 {
-	raise_softirq_irqoff(SCHED_SOFTIRQ);
+	struct rq *rq = info;
+        int cpu = cpu_of(rq);
+	wake_up_nohz_cpu(cpu);
+	raise_softirq(SCHED_SOFTIRQ);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -9164,6 +9167,24 @@ int migrate_task_to(struct task_struct *p, int target_cpu)
 	trace_sched_move_numa(p, curr_cpu, target_cpu);
 	return stop_one_cpu(curr_cpu, migration_cpu_stop, &arg);
 }
+
+int migrate_task_to_async(struct task_struct *p, int target_cpu)
+{
+        struct migration_arg arg = { p, target_cpu };
+        int curr_cpu = task_cpu(p);
+	struct rq *rq = cpu_rq(target_cpu);
+        if (curr_cpu == target_cpu)
+                return 0;
+
+        if (!cpumask_test_cpu(target_cpu, p->cpus_ptr))
+                return -EINVAL;
+
+        /* TODO: This is not properly updating schedstats */
+
+        trace_sched_move_numa(p, curr_cpu, target_cpu);
+        return stop_one_cpu_nowait(curr_cpu, migration_cpu_stop, &arg,&rq->preempt_migrate_work);
+}
+
 
 /*
  * Requeue a task on a given node and accurately track the number of NUMA

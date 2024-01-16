@@ -1065,7 +1065,7 @@ struct rq {
 	int			active_balance;
 	int			push_cpu;
 	struct cpu_stop_work	active_balance_work;
-
+	struct cpu_stop_work 	preempt_migrate_work;
 	/* CPU of this runqueue: */
 	int			cpu;
 	int			online;
@@ -1733,6 +1733,7 @@ enum numa_faults_stats {
 };
 extern void sched_setnuma(struct task_struct *p, int node);
 extern int migrate_task_to(struct task_struct *p, int cpu);
+extern int migrate_task_to_async(struct task_struct *p, int cpu);
 extern int migrate_swap(struct task_struct *p, struct task_struct *t,
 			int cpu, int scpu);
 extern void init_numa_balancing(unsigned long clone_flags, struct task_struct *p);
