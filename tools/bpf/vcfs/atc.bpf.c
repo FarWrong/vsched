@@ -176,7 +176,7 @@ int BPF_PROG(test,struct rq *rq,u64 now)
                                 last_time=now-rq->last_preemption;
                         }
                         //note that there's supposed to be a breakpoint here
-                        s64 prev_time_brk = (rq->last_active_time);
+                        s64 prev_time_brk = (rq->last_active_time)/10*5;
 			if(prev_time_brk<50000){
 				prev_time_brk=1000000;
 			}
@@ -191,6 +191,8 @@ int BPF_PROG(test,struct rq *rq,u64 now)
 						bpf_printk("preempt block flag:%d",rq->preempt_migrate_locked);
 						bpf_printk("breakpoint: %llu",prev_time_brk);
 						bpf_printk("Current Task: %s\n", curr->comm);
+						bpf_printk("Current Task Allowance:%d\n",curr->stop_preempt_migrated);
+						bpf_printk("Current origin cpu:%d\n",curr->origin_cpu_preempt);
 						return 1;
 				}
                         }

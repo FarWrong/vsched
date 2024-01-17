@@ -779,7 +779,8 @@ struct task_struct {
 	int				wake_cpu;
 #endif
 	int				on_rq;
-
+	int 				stop_preempt_migrated;
+	int				origin_cpu_preempt;
 	int				prio;
 	int				static_prio;
 	int				normal_prio;
