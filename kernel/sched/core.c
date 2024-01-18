@@ -36,7 +36,7 @@
 #include <linux/sched/nohz.h>
 #include <linux/sched/rseq_api.h>
 #include <linux/sched/rt.h>
-
+#include <linux/delay.h>
 #include <linux/blkdev.h>
 #include <linux/context_tracking.h>
 #include <linux/cpuset.h>
@@ -1202,12 +1202,53 @@ static void nohz_csd_func(void *info)
 
 #endif /* CONFIG_NO_HZ_COMMON */
 
+struct int_arg {
+        int                             dest_cpu;
+};
+
+
+static int spin_up_function(void *data) {
+    struct int_arg *arg = data;
+    struct rq *rq = cpu_rq(arg->dest_cpu);
+    int this_cpu = smp_processor_id();
+
+    //rq->preempt_migrate_flag=1;
+    u64 start;
+    int nr_running;
+    pr_info("Kernel thread running on CPU %d\n", smp_processor_id());
+    pr_info("Source cpu is  %d\n", cpu_of(rq));
+    return 0;
+    start = rq_clock(this_rq());
+    u64 now;
+    while (!kthread_should_stop()) {
+        now = rq_clock(this_rq());
+        nr_running = this_rq()->nr_running;
+        //if i'm running more then one task, I'm active anyway,no need to be here any longer
+        if (nr_running != 1) { 
+		return 0;
+        }
+        //if the destination is preempted, or we've been doing this for too long, might as well give up.
+        if( (((now-start)>3000000)) || (is_cpu_preempted(arg->dest_cpu))){
+                return 0;
+        }
+        pr_info("Kernel thread running on CPU %d\n", smp_processor_id());
+    }
+    return 0;
+}
+
+
 static void preempt_migrate_func(void *info)
 {
 	struct rq *rq = info;
-        int cpu = cpu_of(rq);
-	wake_up_nohz_cpu(cpu);
-	raise_softirq(SCHED_SOFTIRQ);
+	printk("redo done please start %d",rq->cpu);
+	printk("redo done please start %d",smp_processor_id());
+        //rq->preempt_migrate_flag=1;
+	stop_one_cpu_nowait(rq->cpu,
+                                        migrate_task_to_async_fair, rq,
+                                        &rq->preempt_migrate_work);
+        //int ret = sched_setscheduler(spin_up_function, SCHED_IDLE, &param);
+
+	//raise_softirq(SCHED_SOFTIRQ);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -2376,6 +2417,7 @@ struct migration_arg {
 	int				dest_cpu;
 	struct set_affinity_pending	*pending;
 };
+
 
 /*
  * @refs: number of wait_for_completion()

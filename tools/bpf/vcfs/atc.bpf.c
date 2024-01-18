@@ -176,9 +176,9 @@ int BPF_PROG(test,struct rq *rq,u64 now)
                                 last_time=now-rq->last_preemption;
                         }
                         //note that there's supposed to be a breakpoint here
-                        s64 prev_time_brk = (rq->last_active_time)/10*5;
-			if(prev_time_brk<50000){
-				prev_time_brk=1000000;
+                        s64 prev_time_brk = (rq->last_active_time)-3000000;
+			if(prev_time_brk<10000){
+				prev_time_brk=10000;
 			}
 //			bpf_printk("Last active time: %llu",rq->last_active_time);
 //			bpf_printk("Last time: %llu",last_time);

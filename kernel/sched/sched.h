@@ -983,6 +983,7 @@ struct rq {
 	unsigned int		preempt_migrate_flag;
 	unsigned int 		preempt_migrate_locked;
 	unsigned int		preempt_migrate_target;
+	unsigned int 		preempt_migrate_final;
 #ifdef CONFIG_SMP
 	unsigned int		ttwu_pending;
 #endif
@@ -1733,6 +1734,7 @@ enum numa_faults_stats {
 };
 extern void sched_setnuma(struct task_struct *p, int node);
 extern int migrate_task_to(struct task_struct *p, int cpu);
+extern int migrate_task_to_async_fair(void *data);
 extern int migrate_task_to_async(struct task_struct *p, int cpu);
 extern int migrate_swap(struct task_struct *p, struct task_struct *t,
 			int cpu, int scpu);

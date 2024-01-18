@@ -186,7 +186,6 @@ int __weak arch_asym_cpu_priority(int cpu)
  */
 static unsigned int sysctl_sched_cfs_bandwidth_slice		= 5000UL;
 #endif
-
 #ifdef CONFIG_SYSCTL
 static struct ctl_table sched_fair_sysctls[] = {
 	{
@@ -10558,7 +10557,6 @@ static int need_active_balance(struct lb_env *env)
 }
 
 static int active_load_balance_cpu_stop(void *data);
-
 static int should_we_balance(struct lb_env *env)
 {
 	struct sched_group *sg = env->sd->groups;
@@ -10910,6 +10908,76 @@ update_next_balance(struct sched_domain *sd, unsigned long *next_balance)
  * least 1 task to be running on each physical CPU where possible, and
  * avoids physical / logical imbalances.
  */
+
+int migrate_task_to_async_fair(void *data)
+{
+        struct rq *busiest_rq = data;
+        int busiest_cpu = cpu_of(busiest_rq);
+        int target_cpu = busiest_rq->preempt_migrate_target;
+        struct rq *target_rq = cpu_rq(target_cpu);
+        struct sched_domain *sd;
+        struct task_struct *p = NULL;
+        struct rq_flags rf;
+
+        rq_lock_irq(busiest_rq, &rf);
+        /*
+         * Between queueing the stop-work and running it is a hole in which
+         * CPUs can become inactive. We should not move tasks from or to
+         * inactive CPUs.
+         */
+        if (!cpu_active(busiest_cpu))
+                goto out_unlock;
+
+        /* Make sure the requested CPU hasn't gone down in the meantime: */
+        if (unlikely(busiest_cpu != smp_processor_id()))
+                goto out_unlock;
+
+        /* Is there any task to move? */
+        if (busiest_rq->nr_running <= 1)
+                goto out_unlock;
+
+        /*
+         * This condition is "impossible", if it occurs
+         * we need to fix it. Originally reported by
+         * Bjorn Helgaas on a 128-CPU setup.
+         */
+        WARN_ON_ONCE(busiest_rq == target_rq);
+
+        /* Search for an sd spanning us and the target CPU. */
+        rcu_read_lock();
+        for_each_domain(target_cpu, sd) {
+                if (cpumask_test_cpu(busiest_cpu, sched_domain_span(sd)))
+                        break;
+        }
+
+        if (likely(sd)) {
+                struct lb_env env = {
+                        .sd             = sd,
+                        .dst_cpu        = target_cpu,
+                        .dst_rq         = target_rq,
+                        .src_cpu        = busiest_rq->cpu,
+                        .src_rq         = busiest_rq,
+                        .idle           = CPU_IDLE,
+                        .flags          = LBF_ACTIVE_LB,
+                };
+
+                update_rq_clock(busiest_rq);
+                p = detach_one_task(&env);
+        }
+        rcu_read_unlock();
+out_unlock:
+        busiest_rq->preempt_migrate_locked=0;
+        rq_unlock(busiest_rq, &rf);
+
+        if (p)
+                attach_one_task(target_rq, p);
+        atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(target_cpu));
+        local_irq_enable();
+
+        return 0;
+}
+
+
 static int active_load_balance_cpu_stop(void *data)
 {
 	struct rq *busiest_rq = data;
@@ -11741,23 +11809,32 @@ out:
  * run_rebalance_domains is triggered when needed from the scheduler tick.
  * Also triggered for nohz idle balancing (with nohz_balancing_kick set).
  */
+//static int migrate_task_to_async_fair(void *data);
+
 static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 {
 	struct rq *this_rq = this_rq();
 	enum cpu_idle_type idle = this_rq->idle_balance ?
 						CPU_IDLE : CPU_NOT_IDLE;
-	if(this_rq->preempt_migrate_flag){
+	if(this_rq->preempt_migrate_final){
 			//nohz_balance_exit_idle(this_rq);
 			int cpu = cpu_of(this_rq);
 			struct task_struct *curr_tsk = this_rq->curr;
 			if(curr_tsk == this_rq->idle){
 				this_rq->preempt_migrate_flag=0;
-                        	atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
+                        	this_rq->preempt_migrate_locked=0;
+				this_rq->preempt_migrate_final=0;
+				atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
 				return;
 			}
-                        migrate_task_to(curr_tsk,this_rq->preempt_migrate_target);
+			stop_one_cpu_nowait(cpu,
+                                        migrate_task_to_async_fair, this_rq,
+                                        &this_rq->preempt_migrate_work);
+//                        migrate_task_to(curr_tsk,this_rq->preempt_migrate_target);
 			this_rq->preempt_migrate_flag=0;
-			atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
+			this_rq->preempt_migrate_final=0;
+//			this_rq->preempt_migrate_locked=0;
+//			atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
 			return;
 	}
 
@@ -11808,9 +11885,13 @@ static int spin_up_function(void *data) {
     struct migration_arg *arg = data;
     struct rq *rq = cpu_rq(arg->dest_cpu);
     int this_cpu = smp_processor_id();
-    rq->preempt_migrate_flag=1;
+
+    //rq->preempt_migrate_flag=1;
     u64 start;
     int nr_running;
+    pr_info("Kernel thread running on CPU %d\n", smp_processor_id());
+    pr_info("Source cpu is  %d\n", cpu_of(rq));
+    return 0;
     start = rq_clock(this_rq());
     u64 now;
     while (!kthread_should_stop()) {
@@ -11849,15 +11930,11 @@ int set_up_migration_on_target(struct rq *rq,int target_cpu) {
 	return 0;
 }
 
-
-
 /*
  * Trigger the SCHED_SOFTIRQ if it is time to do periodic load balancing.
  */
 void trigger_load_balance(struct rq *rq)
 {
-
-
 
 	/*
 	 * Don't need to rebalance while attached to NULL domain or
@@ -11882,6 +11959,9 @@ void trigger_load_balance(struct rq *rq)
                                 * We need a cpu that's not: A destination for an existing migration
                                 *
                                 */
+				if(select_cpu == cpu){
+					continue;
+				}
                                 if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)) {
                                         unsigned int is_held=atomic_fetch_or(PRMPT_HELD_MASK,prmpt_flags(select_cpu));
                                         if(!(is_held & PRMPT_HELD_MASK)) {
@@ -11893,12 +11973,20 @@ void trigger_load_balance(struct rq *rq)
                         }
                         if(target_cpu!=-1){
 				rq->preempt_migrate_locked=1;
-                                set_up_migration_on_target(rq,target_cpu);
+				rq->preempt_migrate_target=target_cpu;
+		//		rq->preempt_migrate_flag=1;
+                  //              set_up_migration_on_target(rq,target_cpu);
+				cpu_rq(target_cpu)->preempt_migrate.info=rq;
+				smp_call_function_single_async(target_cpu, &cpu_rq(target_cpu)->preempt_migrate);
                         }
 		}
         }
 
 	if(time_after_eq(jiffies, rq->next_balance) || rq->preempt_migrate_flag){
+		if(rq->preempt_migrate_flag){
+			rq->preempt_migrate_final=1;
+			rq->preempt_migrate_flag=0;
+		}
 		raise_softirq(SCHED_SOFTIRQ);
 	}
 
