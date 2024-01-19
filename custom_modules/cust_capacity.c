@@ -41,12 +41,10 @@ void set_capacities(char *data) {
  	while ((token = strsep(&cur, ";")) != NULL) {
         if (*token == '\0')
             continue;
-
-        //ret = kstrtol(token, 10, &number);
-        if (cur)
-            break;
-
-        set_custom_capacity((unsigned long)number, index++);
+        kstrtol(token, 10, &number);
+	printk("Capacity:%lu Cpu%d:",(unsigned long)number,index);
+        set_custom_capacity((unsigned long)number, index);
+	index=index+1;
     }
 
     kfree(data_copy);
@@ -71,6 +69,7 @@ ssize_t procfile_write(struct file *file, const char __user *buffer, size_t coun
         kfree(procfs_buffer);
         return -EFAULT;
     }
+
 
     set_capacities(procfs_buffer);
     kfree(procfs_buffer);

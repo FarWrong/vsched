@@ -176,14 +176,23 @@ int BPF_PROG(test,struct rq *rq,u64 now)
                                 last_time=now-rq->last_preemption;
                         }
                         //note that there's supposed to be a breakpoint here
-                        s64 prev_time_brk = (rq->last_active_time)-3000000;
-			if(prev_time_brk<10000){
-				prev_time_brk=10000;
+                        s64 prev_time_brk;
+			if(rq->last_active_time<10000){
+				prev_time_brk = 1000000;
+			}else{
+				prev_time_brk = (rq->last_active_time)/10 * 6;
 			}
 //			bpf_printk("Last active time: %llu",rq->last_active_time);
 //			bpf_printk("Last time: %llu",last_time);
 			if(prev_time_brk < last_time){
 				if (simple_strcmp(curr->comm, "sysbench") == 0) {
+						if(rq->preempt_migrate_locked==0){
+							bpf_printk("WE ARE MOVABle: %llu",now);
+						}else{
+							bpf_printk("WE are NOT movable: %llu",now);
+							bpf_printk("preempt flag:%d",rq->preempt_migrate_flag);
+						}
+/*
 						bpf_printk("Now: %llu",now);
 						bpf_printk("Last active time: %llu",rq->last_active_time);
 						bpf_printk("Last time: %llu",last_time);
@@ -193,6 +202,7 @@ int BPF_PROG(test,struct rq *rq,u64 now)
 						bpf_printk("Current Task: %s\n", curr->comm);
 						bpf_printk("Current Task Allowance:%d\n",curr->stop_preempt_migrated);
 						bpf_printk("Current origin cpu:%d\n",curr->origin_cpu_preempt);
+*/
 						return 1;
 				}
                         }

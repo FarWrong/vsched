@@ -8939,6 +8939,7 @@ static void update_cpu_capacity(struct sched_domain *sd, int cpu)
 
 	if(rq->cpu_capacity_custom > 0) {
                 rq->cpu_capacity = rq->cpu_capacity_custom;
+		capacity = rq->cpu_capacity_custom;
         }
 	/*
 	 * Detect if the performance domain is in capacity inversion state.
@@ -10966,14 +10967,12 @@ int migrate_task_to_async_fair(void *data)
         }
         rcu_read_unlock();
 out_unlock:
-        busiest_rq->preempt_migrate_locked=0;
+	busiest_rq->preempt_migrate_locked = 0;
         rq_unlock(busiest_rq, &rf);
-
         if (p)
                 attach_one_task(target_rq, p);
         atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(target_cpu));
-        local_irq_enable();
-
+	local_irq_enable();
         return 0;
 }
 
@@ -11816,55 +11815,6 @@ static __latent_entropy void run_rebalance_domains(struct softirq_action *h)
 	struct rq *this_rq = this_rq();
 	enum cpu_idle_type idle = this_rq->idle_balance ?
 						CPU_IDLE : CPU_NOT_IDLE;
-	if(this_rq->preempt_migrate_final){
-			//nohz_balance_exit_idle(this_rq);
-			int cpu = cpu_of(this_rq);
-			struct task_struct *curr_tsk = this_rq->curr;
-			if(curr_tsk == this_rq->idle){
-				this_rq->preempt_migrate_flag=0;
-                        	this_rq->preempt_migrate_locked=0;
-				this_rq->preempt_migrate_final=0;
-				atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
-				return;
-			}
-			stop_one_cpu_nowait(cpu,
-                                        migrate_task_to_async_fair, this_rq,
-                                        &this_rq->preempt_migrate_work);
-//                        migrate_task_to(curr_tsk,this_rq->preempt_migrate_target);
-			this_rq->preempt_migrate_flag=0;
-			this_rq->preempt_migrate_final=0;
-//			this_rq->preempt_migrate_locked=0;
-//			atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(cpu));
-			return;
-	}
-
-/*
-		int cpu = cpu_of(this_rq);
-        	struct task_struct *curr = this_rq->curr;
-        	this_rq->preempt_migrate_flag=0;
-		int least_loaded_cpu = -1;
-		int select_cpu=-1;
-		unsigned long load=0;
-		unsigned long min_load = ULONG_MAX;
-		if(curr != this_rq->idle){
-			for_each_cpu_wrap(select_cpu,  &(curr->cpus_mask), cpu+1) {
-				if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
-					break;
-				}
-				if(sched_idle_cpu(select_cpu) || available_idle_cpu(select_cpu)){
-					struct rq *dir_rq = cpu_rq(select_cpu);
-					load = cpu_load(dir_rq);
-                        		if (load < min_load) {
-                                		min_load = load;
-                                		least_loaded_cpu = select_cpu;
-                        		}
-				}
-        		}
-			if(select_cpu!=-1){
-				migrate_task_to(curr,select_cpu);
-			}
-		}
-*/
 	/*
 	 * If this CPU has a pending nohz_balance_kick, then do the
 	 * balancing on behalf of the other idle CPUs whose ticks are
@@ -11948,7 +11898,7 @@ void trigger_load_balance(struct rq *rq)
                 int test = bpf_sched_cfs_sched_tick_end(rq,now_time);
                 struct task_struct *curr = rq->curr;
 
-		if(test>0 && rq->preempt_migrate_locked==0){
+		if(test>0){
                         int select_cpu;
                         int target_cpu=-1;
 			int cpu = cpu_of(rq);
@@ -11968,7 +11918,6 @@ void trigger_load_balance(struct rq *rq)
                                                         target_cpu=select_cpu;
                                                         break;
                                         }
-                                        atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(select_cpu));
                                 }
                         }
                         if(target_cpu!=-1){
@@ -11981,12 +11930,16 @@ void trigger_load_balance(struct rq *rq)
                         }
 		}
         }
-
-	if(time_after_eq(jiffies, rq->next_balance) || rq->preempt_migrate_flag){
-		if(rq->preempt_migrate_flag){
-			rq->preempt_migrate_final=1;
-			rq->preempt_migrate_flag=0;
-		}
+/*
+	if(rq->preempt_migrate_flag){
+		rq->preempt_migrate_locked=0;
+		rq->preempt_migrate_flag=0;
+		stop_one_cpu_nowait(rq->cpu,
+                                        migrate_task_to_async_fair, rq,
+                                        &rq->preempt_migrate_work);
+	}
+*/
+	if(time_after_eq(jiffies, rq->next_balance)){
 		raise_softirq(SCHED_SOFTIRQ);
 	}
 
