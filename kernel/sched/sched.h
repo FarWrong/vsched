@@ -119,7 +119,7 @@ extern void call_trace_sched_update_nr_running(struct rq *rq, int count);
 extern unsigned int sysctl_sched_rt_period;
 extern int sysctl_sched_rt_runtime;
 extern int sched_rr_timeslice;
-
+extern unsigned long average_wakeup_latency;
 /*
  * Helpers for converting nanosecond timing to jiffy resolution
  */
@@ -983,7 +983,9 @@ struct rq {
 	unsigned int		preempt_migrate_flag;
 	unsigned int 		preempt_migrate_locked;
 	unsigned int		preempt_migrate_target;
-	unsigned int 		preempt_migrate_final;
+	unsigned long		avg_wakeup_latency;
+	unsigned long		wakeup_stamp;
+	unsigned long 		broadcast_migrate;
 #ifdef CONFIG_SMP
 	unsigned int		ttwu_pending;
 #endif
@@ -1083,7 +1085,7 @@ struct rq {
 #endif
 	u64			idle_stamp;
 	u64			avg_idle;
-	u64			last_idle_delta;
+	u64			actv_stamp;
 
 	unsigned long		wake_stamp;
 	u64			wake_avg_idle;
@@ -2802,6 +2804,7 @@ extern void cfs_bandwidth_usage_dec(void);
 #define NOHZ_NEXT_KICK		BIT(NOHZ_NEXT_KICK_BIT)
 
 #define PRMPT_HELD_MASK		BIT(2)
+#define PRMPT_ALL_HELD_MASK 	BIT(3)
 #define NOHZ_KICK_MASK	(NOHZ_BALANCE_KICK | NOHZ_STATS_KICK | NOHZ_NEXT_KICK)
 
 #define nohz_flags(cpu)	(&cpu_rq(cpu)->nohz_flags)
@@ -2827,6 +2830,15 @@ struct irqtime {
 };
 
 DECLARE_PER_CPU(struct irqtime, cpu_irqtime);
+DECLARE_PER_CPU(int, idle_pb);
+extern void active_idle_polling(int cpu)
+{
+	int* idle_pb_ls = &per_cpu(idle_pb,cpu);
+	idle_pb_ls = 1;
+	return;
+}
+
+
 
 /*
  * Returns the irqtime minus the softirq time computed by ksoftirqd.

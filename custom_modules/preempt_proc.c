@@ -4,7 +4,7 @@
 #include <linux/kernel.h>   
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
-#define BUFSIZE  600
+#define BUFSIZE  6000
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 #include <linux/sched.h>

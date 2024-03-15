@@ -4,3 +4,8 @@ BPF_SCHED_HOOK(int, 0, cfs_check_preempt_wakeup, struct task_struct *curr, struc
 BPF_SCHED_HOOK(int, 0, cfs_wakeup_preempt_entity, struct sched_entity *curr, struct sched_entity *se)
 BPF_SCHED_HOOK(int, 0, cfs_vcpu_capacity, void)
 BPF_SCHED_HOOK(int, 0, cfs_sched_tick_end,struct rq *rq,u64 now_time)
+BPF_SCHED_HOOK(int, 0, cfs_get_polling_amount,struct rq *rq)
+BPF_SCHED_HOOK(int, 0, cfs_should_lock_iter,struct rq *rq)
+BPF_SCHED_HOOK(int, 0, cfs_should_lock,struct rq *rq)
+BPF_SCHED_HOOK(int, 0, cfs_select_run_cpu,struct rq *rq,struct task_struct *curr,u64 now_time,struct rq *(*get_rq)(int))
+BPF_SCHED_HOOK(int, 0, cfs_spinlock_on,void)

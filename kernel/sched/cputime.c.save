@@ -128,7 +128,6 @@ void account_user_time(struct task_struct *p, u64 cputime)
 	task_group_account_field(p, index, cputime);
 	struct rq *rq = this_rq();
 	rq->actv_stamp=sched_clock();
-
 	/* Account for user time used */
 	acct_account_cputime(p);
 }

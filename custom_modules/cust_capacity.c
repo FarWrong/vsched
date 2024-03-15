@@ -20,7 +20,6 @@
 #include <linux/sched.h>
 #define PROCFS_NAME "edit_capacity"
 #define BUFFER_SIZE 4096
-#define NR_CPUS 16
 static struct proc_dir_entry *capacity_proc;
 extern void set_custom_capacity(unsigned long capacity, int cpu);
 

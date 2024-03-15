@@ -20,8 +20,7 @@
 #include <linux/rcupdate.h>
 #include <linux/sched.h>
 #define PROCFS_NAME "edit_topology"
-#define BUFFER_SIZE 4096
-#define NR_CPUS 32
+#define BUFFER_SIZE 8096
 
 static struct proc_dir_entry *topology_proc;
 extern cpumask_var_t cpu_l2c_shared_map;
@@ -100,7 +99,7 @@ struct sched_domain_topology_level *get_list_with_starting_stacking(struct sched
     }
     //Initialize the first element
     new_top[0] = topology[0];
-//    new_top[0].sd_flags =  SD_SHARE_CPUCAPACITY | SD_SHARE_PKG_RESOURCES;
+//  new_top[0].sd_flags =  SD_SHARE_CPUCAPACITY | SD_SHARE_PKG_RESOURCES;
     new_top[0].name=kmalloc(strlen("STK")+1,GFP_KERNEL);
     new_top[0].name="STK";
 
@@ -122,10 +121,10 @@ void my_custom_function(char *data) {
         printk(KERN_INFO "Data received: %s\n", data);
 	cpumask_t use_cpumask;
 	cpumask_clear(&use_cpumask);
-	if(strcmp(topology[0].name,"SMT")==0){
-		topology = get_list_with_starting_stacking(topology);
-	}
-	topology[0].mask = stackingMask;
+//	if(strcmp(topology[0].name,"SMT")==0){
+//		topology = get_list_with_starting_stacking(topology);
+//	}
+//	topology[0].mask = stackingMask;
         int sched_domain=0;
 
 	int comp_cpu=0;
@@ -140,19 +139,21 @@ void my_custom_function(char *data) {
 		if(sched_domain==0){
 			cpumask_copy(&cpuset_array[cpu],&use_cpumask);
 		}else{
-			if(sched_domain==1){
-				cpumask_copy(topology[2].mask(cpu),&use_cpumask);
-			}
-			cpumask_copy(topology[sched_domain].mask(cpu),&use_cpumask);
+//			if(sched_domain==1){
+//				cpumask_copy(topology[2].mask(cpu),&use_cpumask);
+//			}
+//			cpumask_copy(topology[sched_domain].mask(cpu),&use_cpumask);
 		}
+//		(topology[sched_domain].mask(cpu)) = use_cpumask;
+		cpumask_copy(topology[sched_domain].mask(cpu),&use_cpumask);
 		cpumask_clear(&use_cpumask);
 		cpu++;
                 comp_cpu=0;
             }else if(currentChar == ':') {
 		sched_domain++;
-		if(sched_domain==2){
-			sched_domain++;
-		}
+//		if(sched_domain==2){
+//			sched_domain++;
+//		}
                 comp_cpu=0;
                 cpu=0;
             }else{

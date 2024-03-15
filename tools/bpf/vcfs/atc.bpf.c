@@ -1,14 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
-
+//#include <linux/sched.h>
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+//#include <linux/sched.h>
+
+#define per_cpu_ptr(ptr, cpu)   ({ (void)(cpu); (ptr); })
+#define per_cpu(var, cpu)	(*per_cpu_ptr(&(var), cpu))
+
+
+__u64 out__runqueues_addr = -1;
+__u64 out__bpf_prog_active_addr = -1;
+__u32 out__rq_cpu = -1; /* percpu struct fields */
+int out__bpf_prog_active = -1; /* percpu int */
+__u32 out__this_rq_cpu = -1;
+int out__this_bpf_prog_active = -1;
+__u32 out__cpu_0_rq_cpu = -1; /* cpu_rq(0)->cpu */
+extern const struct rq runqueues __ksym; /* struct type global var. */
+extern const int bpf_prog_active __ksym; /* int type global var. */
+
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 unsigned long tgidpid = 0;
 unsigned long cgid = 0;
 unsigned long allret = 0;
 unsigned long max_exec_slice = 0;
+
+
+
 
 int simple_strcmp(const char *s1, const char *s2) {
     while (*s1 == *s2) {
@@ -27,136 +47,6 @@ int simple_strcmp(const char *s1, const char *s2) {
 //#define debug(args...) bpf_printk(args)
 #define debug(args...)
 
-/*
-SEC("sched/cfs_check_preempt_wakeup")
-int BPF_PROG(wakeup, struct task_struct *curr, struct task_struct *p)
-{
-	unsigned long tgidpid1, tgidpid2;
-	int ret = 0;
-
-	if (allret)
-		return allret;
-
-	if (tgidpid) {
-		tgidpid1 = (unsigned long)curr->tgid << 32 | curr->pid;
-		tgidpid2 = (unsigned long)p->tgid << 32 | p->pid;
-
-		if ((tgidpid1 & tgidpid) == tgidpid)
-			ret = -1;
-		else if ((tgidpid2 & tgidpid) == tgidpid)
-			ret = 1;
-
-		if (ret) {
-			debug("wakeup1 tgid %d pid %d", tgidpid1 >> 32,
-				   tgidpid1 & 0xFFFFFFFF);
-			debug("wakeup2 tgid %d pid %d", tgidpid2 >> 32,
-				   tgidpid2 & 0xFFFFFFFF);
-			debug("wakeup ret %d", ret);
-		}
-	} else if (cgid) {
-		if (bpf_sched_entity_belongs_to_cgrp(&curr->se, cgid))
-			ret = -1;
-		else if (bpf_sched_entity_belongs_to_cgrp(&p->se, cgid))
-			ret = 1;
-
-		if (ret) {
-			tgidpid1 = (unsigned long)curr->tgid << 32 | curr->pid;
-			tgidpid2 = (unsigned long)p->tgid << 32 | p->pid;
-
-			debug("wakeup1 tgid %d pid %d", tgidpid1 >> 32,
-				   tgidpid1 & 0xFFFFFFFF);
-			debug("wakeup2 tgid %d pid %d", tgidpid2 >> 32,
-				   tgidpid2 & 0xFFFFFFFF);
-			debug("wakeup ret %d", ret);
-		}
-	}
-	return ret;
-}
-*/
-
-/*
-SEC("sched/cfs_wakeup_preempt_entity")
-int BPF_PROG(preempt_entity, struct sched_entity *curr, struct sched_entity *se)
-{
-	int ret = 0;
-
-	if (allret)
-		return allret;
-
-	if (curr == NULL || se == NULL)
-		return 0;
-	if (tgidpid) {
-		unsigned long tgidpid1, tgidpid2;
-
-		tgidpid1 = bpf_sched_entity_to_tgidpid(curr);
-		tgidpid2 = bpf_sched_entity_to_tgidpid(se);
-
-		if ((tgidpid1 & tgidpid) == tgidpid)
-			ret = -1;
-		else if ((tgidpid2 & tgidpid) == tgidpid)
-			ret = 1;
-
-		if (ret) {
-			debug("entity1 tgid %d pid %d", tgidpid1 >> 32,
-				   tgidpid1 & 0xFFFFFFFF);
-			debug("entity2 tgid %d pid %d", tgidpid2 >> 32,
-				   tgidpid2 & 0xFFFFFFFF);
-			debug("entity ret %d", ret);
-		}
-
-	} else if (cgid) {
-		if (bpf_sched_entity_belongs_to_cgrp(curr, cgid))
-			ret = -1;
-		else if (bpf_sched_entity_belongs_to_cgrp(se, cgid))
-			ret = 1;
-
-		if (ret) {
-			debug("entity cg %lu", bpf_sched_entity_to_cgrpid(curr));
-			debug("entity cg %lu", bpf_sched_entity_to_cgrpid(se));
-			debug("entity cg %d", ret);
-		}
-	}
-
-	return ret;
-}
-*/
-
-/*
-SEC("sched/cfs_check_preempt_tick")
-int BPF_PROG(tick, struct sched_entity *curr, unsigned long delta_exec)
-{
-	unsigned long tgidpid1;
-	int ret = 0;
-
-	if (delta_exec > max_exec_slice)
-		return 0;
-
-	if (allret)
-		return allret;
-
-	if (curr == NULL)
-		return 0;
-
-	if (tgidpid) {
-		tgidpid1 = bpf_sched_entity_to_tgidpid(curr);
-
-		if ((tgidpid1 & tgidpid) == tgidpid)
-			ret = -1;
-
-		if (ret)
-			debug("tick tgid %d pid %d ret %d", tgidpid1 >> 32,
-				   tgidpid1 & 0xFFFFFFFF, ret);
-
-	} else if (cgid) {
-		if (bpf_sched_entity_belongs_to_cgrp(curr, cgid)) {
-			ret = -1;
-			debug("tick cg %lu %d", bpf_sched_entity_to_cgrpid(curr), ret);
-		}
-	}
-
-	return ret;
-}
-*/
 
 
 SEC("sched/cfs_sched_tick_end")
@@ -165,8 +55,7 @@ int BPF_PROG(test,struct rq *rq,u64 now)
 	struct task_struct *curr = rq->curr;
 	const char test_str[] = "test string:%llu\n";
 	s64 delta_exec;
-//	bpf_trace_printk(test_str,sizeof(test_str),*(long *)(curr->se.vruntime));
-	if(rq->nr_running==1 && (curr != rq->idle)){
+	if(rq->nr_running>0 && (curr != rq->idle)){
 		if(rq->last_preemption !=0){
 			delta_exec = (now) - (rq->last_idle_tp);
                         s64 last_time;
@@ -177,33 +66,21 @@ int BPF_PROG(test,struct rq *rq,u64 now)
                         }
                         //note that there's supposed to be a breakpoint here
                         s64 prev_time_brk;
-			if(rq->last_active_time<10000){
-				prev_time_brk = 1000000;
+			if(rq->last_active_time<1200000){
+				prev_time_brk = 3000000;
 			}else{
-				prev_time_brk = (rq->last_active_time)/10 * 6;
+				prev_time_brk = (rq->last_active_time)/10 * 8 - 1000000;
 			}
-//			bpf_printk("Last active time: %llu",rq->last_active_time);
-//			bpf_printk("Last time: %llu",last_time);
+			prev_time_brk = 2000000;
 			if(prev_time_brk < last_time){
-				if (simple_strcmp(curr->comm, "sysbench") == 0) {
-						if(rq->preempt_migrate_locked==0){
-							bpf_printk("WE ARE MOVABle: %llu",now);
-						}else{
-							bpf_printk("WE are NOT movable: %llu",now);
-							bpf_printk("preempt flag:%d",rq->preempt_migrate_flag);
-						}
-/*
-						bpf_printk("Now: %llu",now);
-						bpf_printk("Last active time: %llu",rq->last_active_time);
-						bpf_printk("Last time: %llu",last_time);
-						bpf_printk("last idle time:%llu",rq->last_idle_delta);
-						bpf_printk("preempt block flag:%d",rq->preempt_migrate_locked);
-						bpf_printk("breakpoint: %llu",prev_time_brk);
-						bpf_printk("Current Task: %s\n", curr->comm);
-						bpf_printk("Current Task Allowance:%d\n",curr->stop_preempt_migrated);
-						bpf_printk("Current origin cpu:%d\n",curr->origin_cpu_preempt);
-*/
-						return 1;
+//				if (simple_strcmp(curr->comm, "sysbench") == 0) {
+				if (1) {
+						if(rq->avg_wakeup_latency != 18446744073709551615){
+							bpf_printk("Average Migration-Wakeup latency: %llu",rq->avg_wakeup_latency);
+							bpf_printk("average Load: %llu",rq->cfs.avg.load_avg);
+							bpf_printk("Last active time: %llu",rq->last_active_time);
+							bpf_printk("Last Idle Time: %llu", rq->broadcast_migrate);							}
+						return 12000000;
 				}
                         }
                 }
@@ -211,3 +88,11 @@ int BPF_PROG(test,struct rq *rq,u64 now)
 	return -1;
 }
 
+SEC("sched/cfs_select_run_cpu")
+int cfs_select_run(const void *ctx)
+{
+	struct rq *rq;
+	rq = (struct rq *)bpf_per_cpu_ptr(&runqueues, 3);
+	bpf_printk("Should be 3: %llu", rq->cpu);
+	return 0;
+}

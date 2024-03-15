@@ -20,6 +20,12 @@ void sched_idle_set_state(struct cpuidle_state *idle_state)
 }
 
 static int __read_mostly cpu_idle_force_poll;
+DECLARE_PER_CPU(int, idle_pb);
+
+
+
+
+
 
 void cpu_idle_poll_ctrl(bool enable)
 {
@@ -289,13 +295,13 @@ static void do_idle(void)
 
 		arch_cpu_idle_enter();
 		rcu_nocb_flush_deferred_wakeup();
-
 		/*
 		 * In poll mode we reenable interrupts and spin. Also if we
 		 * detected in the wakeup from idle path that the tick
 		 * broadcast device expired for us, we don't want to go deep
 		 * idle as we know that the IPI is going to arrive right away.
 		 */
+
 		if (cpu_idle_force_poll || tick_check_broadcast_expired()) {
 			tick_nohz_idle_restart_tick();
 			cpu_idle_poll();

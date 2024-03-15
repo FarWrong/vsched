@@ -1211,7 +1211,6 @@ static int spin_up_function(void *data) {
     struct int_arg *arg = data;
     struct rq *rq = cpu_rq(arg->dest_cpu);
     int this_cpu = smp_processor_id();
-
     //rq->preempt_migrate_flag=1;
     u64 start;
     int nr_running;
@@ -1236,19 +1235,87 @@ static int spin_up_function(void *data) {
     return 0;
 }
 
+static int my_kthread_function(void *data) {
+    struct rq *rq;
+    unsigned int cpu;
+
+    // Keep running until told to stop
+    while (!kthread_should_stop()) {
+        set_current_state(TASK_INTERRUPTIBLE);
+        cpu = smp_processor_id(); // Get the current CPU ID
+        rq = cpu_rq(cpu); // Get the runqueue for the current CPU
+        // Accessing rq fields should be done carefully considering locking
+        // Assuming here you have a safe way to access or evaluate rq->nr_running
+        // For demonstration, just print the CPU number and loop
+        printk(KERN_INFO "Checking CPU %u; nr_running: %d\n", cpu, rq->nr_running);
+        // You might want to check conditions here and break the loop if necessary
+        // For example, 
+	if (rq->nr_running > 1) {
+		break; 
+	}
+
+        schedule(); // Yield the processor
+    }
+
+    return 0;
+}
+
+void my_work_function(struct work_struct *work) {
+    unsigned int cpu = smp_processor_id();
+    struct rq *rq = cpu_rq(cpu); // Access the runqueue for the current CPU
+
+    // Safety note: In a real-world scenario, ensure proper synchronization when accessing rq
+    if (rq->nr_running > 1) { // More than one task running indicates the presence of other tasks
+        printk(KERN_INFO "CPU %u has other tasks running.\n", cpu);
+    } else {
+        printk(KERN_INFO "CPU %u has no other tasks running. Rescheduling work.\n", cpu);
+        // Immediately reschedule the work if no other tasks are running
+        schedule_work(work);
+    }
+}
+//TODO: This waits forever, needs fix for safety
+static noinline int __cpuidle custom_idle_poll(int cpu)
+{
+	stop_critical_timings();
+	ct_idle_enter();
+	local_irq_enable();
+	int counter=0;
+	while(!tif_need_resched())	{
+		cpu_relax();
+		cpu_relax();
+		if(counter>200000){
+			break;
+		}
+		if(is_cpu_preempted(cpu) || (idle_cpu(cpu)) ){
+			break;
+		}
+		counter++;
+	}
+	ct_idle_exit();
+	start_critical_timings();
+	return 1;
+}
 
 static void preempt_migrate_func(void *info)
 {
+	static struct task_struct *my_thread;
+	static struct work_struct my_work;
 	struct rq *rq = info;
-	printk("redo done please start %d",rq->cpu);
-	printk("redo done please start %d",smp_processor_id());
+	struct rq *this_rq = this_rq();
         //rq->preempt_migrate_flag=1;
-	stop_one_cpu_nowait(rq->cpu,
+	if(!is_cpu_preempted(rq->cpu)){
+		rq->broadcast_migrate=sched_clock();
+		stop_one_cpu_nowait(rq->cpu,
                                         migrate_task_to_async_fair, rq,
                                         &rq->preempt_migrate_work);
-        //int ret = sched_setscheduler(spin_up_function, SCHED_IDLE, &param);
+		custom_idle_poll(rq->cpu);
+	}else{
 
-	//raise_softirq(SCHED_SOFTIRQ);
+		rq->preempt_migrate_locked = 0;
+        	atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(smp_processor_id()));
+	}
+	//raise_softirq_irqoff(SCHED_SOFTIRQ);
+        //int ret = sched_setscheduler(spin_up_function, SCHED_IDLE, &param);
 }
 
 #ifdef CONFIG_NO_HZ_FULL
@@ -3743,7 +3810,6 @@ static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags,
 	if (rq->idle_stamp) {
 		u64 delta = rq_clock(rq) - rq->idle_stamp;
 		u64 max = 2*rq->max_idle_balance_cost;
-		rq->last_idle_delta=delta;
 		update_avg(&rq->avg_idle, delta);
 
 		if (rq->avg_idle > max)
