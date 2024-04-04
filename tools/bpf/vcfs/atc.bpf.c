@@ -5,8 +5,9 @@
 #include <bpf/bpf_tracing.h>
 //#include <linux/sched.h>
 
-#define per_cpu_ptr(ptr, cpu)   ({ (void)(cpu); (ptr); })
-#define per_cpu(var, cpu)	(*per_cpu_ptr(&(var), cpu))
+
+#define for_each_cpu_wrap(cpu, mask, start)	\
+	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask, (void)(start))
 
 
 __u64 out__runqueues_addr = -1;
@@ -18,7 +19,53 @@ int out__this_bpf_prog_active = -1;
 __u32 out__cpu_0_rq_cpu = -1; /* cpu_rq(0)->cpu */
 extern const struct rq runqueues __ksym; /* struct type global var. */
 extern const int bpf_prog_active __ksym; /* int type global var. */
+#define BITS_PER_LONG (sizeof(long) * 8)
 
+#define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
+#define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
+
+#define BITS_TO_LONGS(nr) (((nr) + BITS_PER_LONG - 1) / BITS_PER_LONG)
+
+#define DECLARE_BITMAP(name, bits) unsigned long name[BITS_TO_LONGS(bits)]
+
+static inline unsigned long *cpumask_bits(const struct cpumask *cpumask)
+{
+    return (unsigned long *)cpumask->bits;
+}
+
+static inline unsigned int cpumask_check(unsigned int cpu)
+{
+    return cpu;
+}
+
+static inline int test_bit(int nr, const unsigned long *addr)
+{
+    return 1UL & (addr[nr / BITS_PER_LONG] >> (nr % BITS_PER_LONG));
+}
+
+static inline int cpumask_test_cpu(int cpu, const struct cpumask *cpumask)
+{
+    return test_bit(cpumask_check(cpu), cpumask_bits(cpumask));
+}
+
+int idle_cpu(struct rq *rq)
+
+{
+//	if(rq->nr_running>0 && rq->curr->policy == 5)
+//		return 1; 
+	if(rq->curr != rq->idle)
+		return 0;
+	if (rq->nr_running)
+		return 0;
+	if (rq->ttwu_pending)
+		return 0;
+
+	return 1;
+}
+
+
+
+// Assuming you have a cpumask called 'cpu_mask'
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
@@ -48,6 +95,26 @@ int simple_strcmp(const char *s1, const char *s2) {
 #define debug(args...)
 
 
+//get time so far
+u64 get_tsf(u64 now_time,struct rq *rq){
+	u64 last_time;
+	if(rq->last_idle_tp>rq->last_preemption){
+		if(rq->last_idle_tp>now_time){
+			return 0;
+		}
+		last_time=now_time-rq->last_idle_tp;
+	}else{
+		if(rq->last_preemption>now_time){
+			return 0;
+		}
+		last_time=now_time-rq->last_preemption;
+		
+	}
+	return last_time;
+
+}
+
+
 
 SEC("sched/cfs_sched_tick_end")
 int BPF_PROG(test,struct rq *rq,u64 now)
@@ -55,44 +122,226 @@ int BPF_PROG(test,struct rq *rq,u64 now)
 	struct task_struct *curr = rq->curr;
 	const char test_str[] = "test string:%llu\n";
 	s64 delta_exec;
-	if(rq->nr_running>0 && (curr != rq->idle)){
+// 	if(rq->cpu_capacity_custom > 1000){
+//		return 0;
+//	}
+	bpf_printk("amount of tasks running on cpu :%d",rq->cfs.idle_h_nr_running);
+//	if((rq->cfs.h_nr_running-rq->cfs.idle_h_nr_running == 1) && (curr != rq->idle)){
+//		if (simple_strcmp(curr->comm, "sysbench") == 0) {
+//                              if (1) {
+//                                        bpf_printk("clock preempt value %llu",rq->clock_preempt);
+//					bpf_printk("sched clock now %llu",now);
+//                                }
+//	if((rq->cfs.h_nr_running>0) && (curr != rq->idle)){
 		if(rq->last_preemption !=0){
-			delta_exec = (now) - (rq->last_idle_tp);
-                        s64 last_time;
-                        if((now-delta_exec)>rq->last_preemption){
-                                last_time=delta_exec;
-                        }else{
-                                last_time=now-rq->last_preemption;
-                        }
-                        //note that there's supposed to be a breakpoint here
-                        s64 prev_time_brk;
-			if(rq->last_active_time<1200000){
-				prev_time_brk = 3000000;
-			}else{
-				prev_time_brk = (rq->last_active_time)/10 * 8 - 1000000;
-			}
-			prev_time_brk = 2000000;
-			if(prev_time_brk < last_time){
-//				if (simple_strcmp(curr->comm, "sysbench") == 0) {
-				if (1) {
-						if(rq->avg_wakeup_latency != 18446744073709551615){
-							bpf_printk("Average Migration-Wakeup latency: %llu",rq->avg_wakeup_latency);
-							bpf_printk("average Load: %llu",rq->cfs.avg.load_avg);
-							bpf_printk("Last active time: %llu",rq->last_active_time);
-							bpf_printk("Last Idle Time: %llu", rq->broadcast_migrate);							}
-						return 12000000;
+			u64 prev_time_brk = 2000000;
+			if(prev_time_brk < get_tsf(now,rq)){
+				if (simple_strcmp(curr->comm, "sysbench") == 0) {
+//				if (1) {
+					return 1;
 				}
                         }
                 }
 	}
-	return -1;
-}
-
-SEC("sched/cfs_select_run_cpu")
-int cfs_select_run(const void *ctx)
-{
-	struct rq *rq;
-	rq = (struct rq *)bpf_per_cpu_ptr(&runqueues, 3);
-	bpf_printk("Should be 3: %llu", rq->cpu);
 	return 0;
 }
+
+int is_cpu_preempted(struct rq *rq,u64 now_time)
+{
+        u64 time_diff;
+        time_diff = now_time-rq->clock_preempt;
+	if(rq->clock_preempt>now_time){
+		return 0;
+	}
+//	bpf_printk("Cpu:%d,time_diff %llu",rq->cpu,time_diff);
+//	bpf_printk("now time %llu",now_time);
+        if(time_diff<100000){
+                return 0;
+       }
+///	if(time_diff>5000000){
+//		return 0;
+//	}
+
+        return time_diff;
+}
+
+
+int select_run_cpu_cpu_util(struct rq *rq, struct rq *select_rq,u64 now_time,int max){
+	if(!idle_cpu(select_rq)){
+                return -1;
+        }
+        if(max == -1){
+                return select_rq->cpu;
+        }
+        struct rq *last_max_rq = bpf_per_cpu_ptr(&runqueues, max);
+        if(!last_max_rq){
+                return -1;
+        }
+        if(select_rq->cfs.avg.util_est.enqueued < last_max_rq->cfs.avg.util_est.enqueued){
+                return select_rq->cpu;
+        }
+        return -1;
+}
+
+
+int select_run_cpu_time(struct rq *rq, struct rq *select_rq,u64 now_time,int max)
+{
+        if(!idle_cpu(select_rq)){
+                return -1;
+        }
+        if((now_time-select_rq->last_active_time) < 100000){
+                return -1;
+        }
+        if(max == -1){
+                return select_rq->cpu;
+        }
+        if(select_rq->last_active_time>now_time){
+                return -1;
+        }
+        struct rq *last_max_rq = bpf_per_cpu_ptr(&runqueues, max);
+        if(!last_max_rq){
+                return -1;
+        }
+        if(select_rq->last_active_time < last_max_rq->last_active_time ){
+                return select_rq->cpu;
+        }
+        return -1;
+}
+SEC("sched/cfs_select_run_cpu")
+int BPF_PROG(test9, struct rq *rq, struct rq *select_rq,u64 now_time,int max)
+{
+	if(!idle_cpu(select_rq)){
+                return -1;
+        }
+        if(max == -1){
+                return select_rq->cpu;
+        }
+        return -1;
+}
+
+struct task_ctx {
+    struct task_struct *curr;
+    int *res_value;
+    u64 now;
+    u64 *preemption_val;
+    int start;
+    u64 rq_lst_prmpt;
+};
+
+
+static int process_cpu(u32 iter, struct task_ctx *ctx1)
+{
+	struct task_struct *curr = ctx1->curr;
+	int cpu = (iter+ctx1->start) % 16; 
+	cpumask_t *cpumask = curr->cpus_ptr;
+        unsigned long cpumask_bits = *(cpumask->bits);
+	int test = cpumask_bits & (1UL << cpu);
+	int *fin = ctx1->res_value;
+	u64 *preemption_val = ctx1->preemption_val;
+	u64 soon_preempt = 0;
+	if(test){
+		struct rq *select_rq = bpf_per_cpu_ptr(&runqueues,cpu);
+		if(select_rq){
+			int islocked = select_rq->prmpt_flags.counter & (1 << (2));
+//			atomic_t locksmith = select_rq->prmpt_flags;
+			if(islocked){
+				return 0;
+			}
+//			if(select_rq->cfs.h_nr_running-select_rq->cfs.idle_h_nr_running > 1){
+//				*fin = -1;
+//				return 1;
+//			}
+//			if(select_rq->cfs.h_nr_running-select_rq->cfs.idle_h_nr_running==1){
+  //                              return 0;
+//                    }
+
+			if(select_rq->nr_running>0 && select_rq->curr->policy == 5){
+
+				u64 preemption_decider = is_cpu_preempted(select_rq,ctx1->now);
+				//we let preemptions that have already happened for a long time
+				//because they're techinically good targets
+				if(preemption_decider<5000000 && preemption_decider !=0){
+				//if(is_cpu_preempted(select_rq,ctx1->now)){
+					return 0;
+				}
+				//We've found somewhere good! Let's just pick it
+		//		if(ctx1->now - select_rq->last_preemption<1000000){
+		//			*fin = (int) (cpu);
+		//			return 1;
+		//		}
+				if((select_rq->last_preemption)<=(ctx1->rq_lst_prmpt) && preemption_decider==0){
+					return 0;
+				}
+				if(1){
+				if(*preemption_val<select_rq->last_preemption){
+					*preemption_val = select_rq->last_preemption;
+					*fin = (int) (cpu);
+					return 0;
+				}
+				return 0;
+			}
+			if(idle_cpu(select_rq)){
+				*fin = (int) (cpu);
+				return 1;
+			}
+
+		}
+	}
+	//bpf_printk("it worked, thank god%d",test);
+	return 0;
+}
+
+static int test_preemption(u32 iter, struct task_ctx *ctx1)
+{
+        struct task_struct *curr = ctx1->curr;
+        int cpu = (iter+ctx1->start) % 16; 
+        cpumask_t *cpumask = curr->cpus_ptr;
+        unsigned long cpumask_bits = *(cpumask->bits);
+        int test = cpumask_bits & (1UL << cpu);
+        int *fin = ctx1->res_value;
+	u64 *preemption_val = ctx1->preemption_val;
+        u64 min_tsf = 99999999;
+        if(test){
+                struct rq *select_rq = bpf_per_cpu_ptr(&runqueues,cpu);
+                if(select_rq){
+                        if(is_cpu_preempted(select_rq,ctx1->now)){
+                                        *fin += 1;
+                                   	return 0;
+                        }
+
+                }
+        }else{
+                bpf_printk("restrained%u",cpu);
+        }
+        //bpf_printk("it worked, thank god%d",test);
+        return 0;
+}
+
+SEC("sched/cfs_select_run_cpu_spin")
+int BPF_PROG(test3, struct rq *rq, struct task_struct *curr, u64 now_time)
+{
+    int start = 0;
+    u32 nr_loops = NR_VCPU_REGS - 1;
+    int re_value = -1;
+    u64 preemption_val = 0;
+
+    struct task_ctx ctx1 = {
+	.curr = curr,
+	.res_value = &re_value,
+        .now = now_time,
+	.preemption_val = &preemption_val,
+	.start = rq->cpu,
+	.rq_lst_prmpt = rq->last_preemption,
+    };
+
+     bpf_loop(nr_loops, &process_cpu, &ctx1, 0);
+    return re_value;
+}
+
+SEC("sched/cfs_should_spinlock")
+int BPF_PROG(test4,int test)
+{
+	return 1;
+}
+
+

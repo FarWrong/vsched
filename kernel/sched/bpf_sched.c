@@ -123,6 +123,18 @@ bpf_sched_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 		return &bpf_sched_entity_to_tgidpid_proto;
 	case BPF_FUNC_sched_entity_to_cgrpid:
 		return &bpf_sched_entity_to_cgrpid_proto;
+	case BPF_FUNC_per_cpu_ptr:
+        	return &bpf_per_cpu_ptr_proto;
+    	case BPF_FUNC_this_cpu_ptr:
+        	return &bpf_this_cpu_ptr_proto;
+	case BPF_FUNC_loop:
+		return &bpf_loop_proto;
+	case BPF_FUNC_spin_lock:
+		return &bpf_spin_lock_proto;
+	case BPF_FUNC_spin_unlock:
+		return &bpf_spin_unlock_proto;
+	case BPF_FUNC_jiffies64:
+		return &bpf_jiffies64_proto;
 	case BPF_FUNC_sched_entity_belongs_to_cgrp:
 		return &bpf_sched_entity_belongs_to_cgrp_proto;
 	default:

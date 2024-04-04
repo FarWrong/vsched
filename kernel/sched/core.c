@@ -1286,7 +1286,7 @@ static noinline int __cpuidle custom_idle_poll(int cpu)
 		if(counter>200000){
 			break;
 		}
-		if(is_cpu_preempted(cpu) || (idle_cpu(cpu)) ){
+		if((idle_cpu(cpu)) ){
 			break;
 		}
 		counter++;
@@ -1303,7 +1303,7 @@ static void preempt_migrate_func(void *info)
 	struct rq *rq = info;
 	struct rq *this_rq = this_rq();
         //rq->preempt_migrate_flag=1;
-	if(!is_cpu_preempted(rq->cpu)){
+	if(1){
 		rq->broadcast_migrate=sched_clock();
 		stop_one_cpu_nowait(rq->cpu,
                                         migrate_task_to_async_fair, rq,

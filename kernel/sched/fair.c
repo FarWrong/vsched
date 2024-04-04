@@ -118,7 +118,8 @@ unsigned int sysctl_sched_child_runs_first __read_mostly;
 struct migration_arg {
     int dest_cpu;
 };
-static DEFINE_SPINLOCK(my_spinlock);
+static raw_spinlock_t my_spinlock = __RAW_SPIN_LOCK_UNLOCKED(my_spinlock);
+
 
 
 
@@ -10930,8 +10931,8 @@ int migrate_task_to_async_fair(void *data)
          */
         if (!cpu_active(busiest_cpu))
                 goto out_unlock;
-	if((now_time - busiest_rq->broadcast_migrate>1000000) && (now_time > busiest_rq->broadcast_migrate))
-                goto out_unlock;
+	//if((now_time - busiest_rq->broadcast_migrate>1000000) && (now_time > busiest_rq->broadcast_migrate))
+        //        goto out_unlock;
 	//if(sched_clock()-target_rq->wakeup_stamp>1000000)
 	//	goto out_unlock;
 
@@ -11850,6 +11851,68 @@ struct rq *get_cpu_rq(int cpu)
     return cpu_rq(cpu);
 }
 
+
+
+int running_migration(struct rq *rq) {
+	u64 now_time=sched_clock();
+        int should_run = bpf_sched_cfs_sched_tick_end(rq,now_time);
+        if(!should_run || rq->preempt_migrate_locked == 1){
+		return 0;
+        }
+        int cpu = cpu_of(rq);
+	int target_cpu = -1;
+	int iterate_cpu;
+        struct task_struct *curr_tsk = rq->curr;
+        int should_spin_lock = bpf_sched_cfs_should_spinlock(1);
+        if(should_spin_lock) {
+        	raw_spin_lock(&my_spinlock);
+                target_cpu = bpf_sched_cfs_select_run_cpu_spin(rq,curr_tsk,now_time);
+                if(target_cpu != -1) {
+                	atomic_fetch_or(PRMPT_HELD_MASK,prmpt_flags(target_cpu));
+                }
+                raw_spin_unlock(&my_spinlock);
+	}else{
+		int max=-1;
+		int tmpmax= -1;
+		int flags;
+		raw_spin_lock(&my_spinlock);
+		for_each_cpu_wrap(iterate_cpu, &curr_tsk->cpus_mask,cpu) {
+			if(!idle_cpu(iterate_cpu)) {
+				continue;
+			}
+			if(iterate_cpu==cpu) {
+				continue;
+			}
+			struct rq *cpu_rq = cpu_rq(iterate_cpu);
+			tmpmax = bpf_sched_cfs_select_run_cpu(rq,cpu_rq,now_time,max);
+		        if(tmpmax>-1) {
+				flags = atomic_fetch_or(PRMPT_HELD_MASK,prmpt_flags(iterate_cpu));
+				if(flags & PRMPT_HELD_MASK) {
+					continue;
+				}else{
+					max=tmpmax;
+					if(target_cpu != -1) {
+                        			atomic_fetch_andnot(PRMPT_HELD_MASK,prmpt_flags(target_cpu));
+                			}
+					target_cpu = iterate_cpu;
+				}
+			}
+		}
+		raw_spin_unlock(&my_spinlock);
+	}
+        if(target_cpu!=-1){
+		struct rq *targ_rq=cpu_rq(target_cpu);
+		rq->preempt_migrate_locked=1;
+		rq->preempt_migrate_target=target_cpu;
+		targ_rq->preempt_migrate.info=rq;
+		targ_rq->wakeup_stamp=sched_clock();
+		smp_call_function_single_async(target_cpu, &targ_rq->preempt_migrate);
+		return 1;
+        }
+
+	return 0;
+}
+
 /*
  * Trigger the SCHED_SOFTIRQ if it is time to do periodic load balancing.
  */
@@ -11865,30 +11928,7 @@ void trigger_load_balance(struct rq *rq)
 		return;
 
 	if (bpf_sched_enabled()) {
-                u64 now_time=sched_clock();
-                int should_run = bpf_sched_cfs_sched_tick_end(rq,now_time);
-		if(should_run){
-			rq->avg_wakeup_latency=-1;
-		}
-                struct task_struct *curr = rq->curr;
-
-		if(should_run && rq->preempt_migrate_locked != 1){
-                        int select_cpu = rq->cpu;
-                        int target_cpu=-1;
-			struct rq_flags rf;
-			int cpu = cpu_of(rq);
-                        struct task_struct *curr_tsk = rq->curr;
-			target_cpu = bpf_sched_cfs_select_run_cpu(rq,curr_tsk,now_time,get_cpu_rq);
-			if(target_cpu!=-1){
-				struct rq *targ_rq=cpu_rq(target_cpu);
-				rq->preempt_migrate_locked=1;
-				rq->preempt_migrate_target=target_cpu;
-				targ_rq->preempt_migrate.info=rq;
-				targ_rq->wakeup_stamp=sched_clock();
-				smp_call_function_single_async(target_cpu, &targ_rq->preempt_migrate);
-				return;
-                        }
-		}
+                running_migration(rq);
         }
 	if(time_after_eq(jiffies, rq->next_balance)){
 		raise_softirq(SCHED_SOFTIRQ);

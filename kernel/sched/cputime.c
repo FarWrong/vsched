@@ -285,7 +285,7 @@ static __always_inline u64 steal_account_process_time(u64 maxtime)
 int is_cpu_preempted(int cpunum)
 {
 	s64 time_diff;
-	time_diff = sched_clock_stable()-this_rq()->clock_preempt;
+	time_diff = sched_clock()-cpu_rq(cpunum)->clock_preempt;
 	if(time_diff>1500000){
 		return 1;
 	}
@@ -402,6 +402,7 @@ void thread_group_cputime(struct task_struct *tsk, struct task_cputime *times)
 static void irqtime_account_process_tick(struct task_struct *p, int user_tick,
 					 int ticks)
 {
+
 	u64 other, cputime = TICK_NSEC * ticks;
 
 	/*
@@ -513,8 +514,9 @@ void thread_group_cputime_adjusted(struct task_struct *p, u64 *ut, u64 *st)
 void account_process_tick(struct task_struct *p, int user_tick)
 {
 	u64 cputime, steal;
-	this_rq()->clock_preempt_prev=this_rq()->clock_preempt;
-	this_rq()->clock_preempt=sched_clock_stable();
+//	this_rq()->clock_preempt = (unsigned long long)(jiffies - INITIAL_JIFFIES)
+//					* (NSEC_PER_SEC / HZ);
+	this_rq()->clock_preempt = sched_clock();
 
 	if (vtime_accounting_enabled_this_cpu())
 		return;
@@ -526,7 +528,6 @@ void account_process_tick(struct task_struct *p, int user_tick)
 
 	cputime = TICK_NSEC;
 	steal = steal_account_process_time(ULONG_MAX);
-
 	if (steal >= cputime)
 		return;
 
